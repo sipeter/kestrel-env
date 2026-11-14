@@ -115,6 +115,18 @@ def pack_result(source, destination):
                 z.write(path, path.relative_to(source).as_posix())
 
 
+def upload_progress(snapshot, tag, repo, env, log):
+    """Progress is optional. A transfer failure must not kill compilation."""
+    try:
+        with Path(log).open('ab') as output:
+            result = subprocess.run(
+                ['gh', 'release', 'upload', tag, str(snapshot), '--repo', repo, '--clobber'],
+                env=env, stdout=output, stderr=subprocess.STDOUT, timeout=20)
+        return result.returncode == 0
+    except (subprocess.TimeoutExpired, OSError):
+        return False
+
+
 def execute(work):
     global PHASE
     spec = json.loads(os.environ.pop('PRIVATE_BUILD_SPEC'))
@@ -160,9 +172,7 @@ def execute(work):
         with log.open('rb') as stream:
             stream.seek(max(0, log.stat().st_size - 65536))
             snapshot.write_bytes(stream.read())
-        with (work / 'progress-transfer.log').open('ab') as output:
-            subprocess.run(['gh', 'release', 'upload', live_tag, str(snapshot), '--repo', repo, '--clobber'],
-                           env=transfer_env, stdout=output, stderr=subprocess.STDOUT, timeout=90)
+        upload_progress(snapshot, live_tag, repo, transfer_env, work / 'progress-transfer.log')
     try:
         PHASE = 'private-input-transfer'
         for asset in spec['assets']:

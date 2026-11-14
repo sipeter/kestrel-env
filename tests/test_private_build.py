@@ -16,6 +16,23 @@ import build_private
 
 
 class PrivateBuildTests(unittest.TestCase):
+    def test_optional_progress_transfer_failures_do_not_escape_or_print(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            snapshot = root / 'progress.log'
+            snapshot.write_text('private-progress-canary')
+            for failure in (subprocess.TimeoutExpired(['private-command'], 20),
+                            OSError('private-error-canary')):
+                output = io.StringIO()
+                with mock.patch('build_private.subprocess.run', side_effect=failure):
+                    with contextlib.redirect_stdout(output), contextlib.redirect_stderr(output):
+                        self.assertFalse(build_private.upload_progress(
+                            snapshot, 'private-tag', 'owner/private', {}, root / 'transfer.log'))
+                self.assertEqual(output.getvalue(), '')
+            with mock.patch('build_private.subprocess.run', return_value=mock.Mock(returncode=1)):
+                self.assertFalse(build_private.upload_progress(
+                    snapshot, 'private-tag', 'owner/private', {}, root / 'transfer.log'))
+
     def test_interruption_preserves_log_and_reports_no_success(self):
         with tempfile.TemporaryDirectory() as d:
             work = Path(d) / 'retained'
