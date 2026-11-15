@@ -1,4 +1,4 @@
-name: Private-input iOS build
+name: Run
 on:
   workflow_dispatch:
 permissions:
